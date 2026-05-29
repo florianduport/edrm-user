@@ -1,4 +1,4 @@
-import { PermissionType } from './permission';
+import { PermissionType } from './permission.js';
 
 export type RoleType = {
   id: string;

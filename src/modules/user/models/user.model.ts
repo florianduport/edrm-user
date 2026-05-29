@@ -2,9 +2,9 @@ import { EnduranceSchema, EnduranceModelType, EnduranceDocumentType } from '@pro
 import bcrypt from 'bcrypt';
 import Role from './role.model.js';
 import Permission from './permission.model.js';
-import { UserType } from '../../../types/user.js';
-import { RoleType, RoleApiType } from '../../../types/role.js';
-import { PermissionApiType } from '../../../types/permission.js';
+import { UserType } from '../types/user.js';
+import { RoleType, RoleApiType } from '../types/role.js';
+import { PermissionApiType } from '../types/permission.js';
 
 class User extends EnduranceSchema implements UserType {
   @EnduranceModelType.prop({

@@ -1,4 +1,4 @@
-import { RoleType } from './role';
+import { RoleType } from './role.js';
 
 export type UserType = {
   id: number;
