@@ -1,3 +1,10 @@
+## [0.4.28](https://github.com/programisto-labs/edrm-user/compare/v0.4.27...v0.4.28) (2026-05-29)
+
+
+### Bug Fixes
+
+* fix types ([7f9c020](https://github.com/programisto-labs/edrm-user/commit/7f9c02066ebb5f1e317a9584e9963c13ae233bdd))
+
 ## [0.4.27](https://github.com/programisto-labs/edrm-user/compare/v0.4.26...v0.4.27) (2026-04-14)
 
 
