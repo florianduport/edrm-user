@@ -1,6 +1,10 @@
+import jwt, { type JwtPayload } from 'jsonwebtoken';
+
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GOOGLE_USERINFO_URL = 'https://www.googleapis.com/oauth2/v3/userinfo';
+const GOOGLE_CERTS_URL = 'https://www.googleapis.com/oauth2/v1/certs';
+const GOOGLE_ID_TOKEN_ISSUERS = ['https://accounts.google.com', 'accounts.google.com'];
 
 export const DEFAULT_GOOGLE_OAUTH_SCOPES = ['openid', 'email', 'profile'] as const;
 
@@ -9,7 +13,7 @@ export type BuildGoogleOAuthAuthUrlParams = {
     redirectUri: string;
     state: string;
     scopes?: readonly string[];
-    /** Restrict sign-in to a Google Workspace hosted domain (optional). */
+    /** Hint account selection for a Google Workspace domain (optional). */
     hostedDomain?: string;
 };
 
@@ -18,7 +22,18 @@ export type ExchangeGoogleOAuthAuthCodeParams = {
     clientSecret: string;
     code: string;
     redirectUri: string;
+    /** Enforce a Google Workspace hosted domain from verified Google claims (optional). */
+    hostedDomain?: string;
 };
+
+type GoogleIdentityClaims = {
+    email?: string;
+    email_verified?: boolean;
+    verified_email?: boolean;
+    hd?: string;
+};
+
+type GoogleIdTokenPayload = JwtPayload & GoogleIdentityClaims;
 
 function normalizeEmail(raw: unknown): string | null {
     if (typeof raw !== 'string') return null;
@@ -26,18 +41,52 @@ function normalizeEmail(raw: unknown): string | null {
     return email || null;
 }
 
-function emailFromIdToken(idToken: string): string | null {
-    const parts = idToken.split('.');
-    if (parts.length !== 3) return null;
+function normalizeHostedDomain(raw: unknown): string | null {
+    if (typeof raw !== 'string') return null;
+    const hostedDomain = raw.trim().toLowerCase();
+    return hostedDomain || null;
+}
+
+function hostedDomainMatches(raw: unknown, expected: string | null): boolean {
+    if (!expected) return true;
+    return normalizeHostedDomain(raw) === expected;
+}
+
+function emailFromClaims(claims: GoogleIdentityClaims, expectedHostedDomain: string | null): string | null {
+    if (claims.email_verified === false || claims.verified_email === false) return null;
+    if (!hostedDomainMatches(claims.hd, expectedHostedDomain)) return null;
+    return normalizeEmail(claims.email);
+}
+
+async function fetchGoogleOAuthCerts(): Promise<Record<string, string>> {
+    const certRes = await fetch(GOOGLE_CERTS_URL);
+    if (!certRes.ok) return {};
+    const certs = (await certRes.json()) as Record<string, unknown>;
+    return Object.entries(certs).reduce<Record<string, string>>((acc, [kid, cert]) => {
+        if (typeof cert === 'string') acc[kid] = cert;
+        return acc;
+    }, {});
+}
+
+async function verifiedGoogleIdTokenClaims(
+    idToken: string,
+    clientId: string
+): Promise<GoogleIdTokenPayload | null> {
     try {
-        const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-        const pad = b64.length % 4 === 0 ? '' : '='.repeat(4 - (b64.length % 4));
-        const payload = JSON.parse(Buffer.from(b64 + pad, 'base64').toString('utf8')) as {
-            email?: string;
-            email_verified?: boolean;
-        };
-        if (payload.email_verified === false) return null;
-        return normalizeEmail(payload.email);
+        const decoded = jwt.decode(idToken, { complete: true });
+        if (!decoded || typeof decoded === 'string') return null;
+        const kid = decoded.header.kid;
+        if (!kid) return null;
+        const certs = await fetchGoogleOAuthCerts();
+        const cert = certs[kid];
+        if (!cert) return null;
+        const verified = jwt.verify(idToken, cert, {
+            algorithms: ['RS256'],
+            audience: clientId,
+            issuer: GOOGLE_ID_TOKEN_ISSUERS
+        });
+        if (typeof verified !== 'object' || verified === null) return null;
+        return verified as GoogleIdTokenPayload;
     } catch {
         return null;
     }
@@ -78,6 +127,7 @@ export async function exchangeGoogleOAuthAuthCode(
     const clientSecret = params.clientSecret?.trim();
     const code = params.code?.trim();
     const redirectUri = params.redirectUri?.trim();
+    const hostedDomain = normalizeHostedDomain(params.hostedDomain);
     if (!clientId || !clientSecret || !code || !redirectUri) {
         throw new Error('exchangeGoogleOAuthAuthCode: clientId, clientSecret, code and redirectUri are required');
     }
@@ -107,7 +157,8 @@ export async function exchangeGoogleOAuthAuthCode(
     };
 
     if (tokenData.id_token) {
-        const fromId = emailFromIdToken(tokenData.id_token);
+        const claims = await verifiedGoogleIdTokenClaims(tokenData.id_token, clientId);
+        const fromId = claims ? emailFromClaims(claims, hostedDomain) : null;
         if (fromId) return { email: fromId };
     }
 
@@ -123,9 +174,6 @@ export async function exchangeGoogleOAuthAuthCode(
         return { email: null };
     }
 
-    const user = (await userRes.json()) as { email?: string; verified_email?: boolean };
-    if (user.verified_email === false) {
-        return { email: null };
-    }
-    return { email: normalizeEmail(user.email) };
+    const user = (await userRes.json()) as GoogleIdentityClaims;
+    return { email: emailFromClaims(user, hostedDomain) };
 }
