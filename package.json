@@ -1,12 +1,16 @@
 {
   "name": "@programisto/edrm-user",
-  "version": "0.4.28",
+  "version": "0.4.29",
   "publishConfig": {
     "access": "public"
   },
   "description": "edurance module for user management",
   "type": "module",
   "main": "app.js",
+  "exports": {
+    ".": "./dist/app.js",
+    "./google-oauth": "./dist/modules/user/lib/google-oauth.helper.js"
+  },
   "scripts": {
     "start": "node ./dist/bin/www",
     "dev": "tsc-watch --onSuccess \"node ./dist/bin/www\"",

@@ -101,7 +101,7 @@ class CustomAccessControl extends EnduranceAccessControl {
         res.status(403).json({
           message: 'Access denied: Insufficient permissions',
           required: permissions,
-          userPermissions: userPermissions
+          userPermissions
         });
         return;
       }
