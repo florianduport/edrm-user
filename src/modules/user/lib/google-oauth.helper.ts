@@ -158,8 +158,7 @@ export async function exchangeGoogleOAuthAuthCode(
 
     if (tokenData.id_token) {
         const claims = await verifiedGoogleIdTokenClaims(tokenData.id_token, clientId);
-        const fromId = claims ? emailFromClaims(claims, hostedDomain) : null;
-        if (fromId) return { email: fromId };
+        if (claims) return { email: emailFromClaims(claims, hostedDomain) };
     }
 
     const accessToken = tokenData.access_token?.trim();

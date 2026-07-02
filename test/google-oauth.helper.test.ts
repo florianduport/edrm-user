@@ -150,7 +150,7 @@ describe('google-oauth.helper', () => {
             assert.equal(out.email, 'info@example.com');
         });
 
-        it('enforces hosted domain from verified claims', async () => {
+        it('enforces hosted domain from verified claims over userinfo fallback', async () => {
             const { idToken, publicKey } = signedGoogleIdToken({
                 email: 'user@example.com',
                 email_verified: true,
@@ -160,7 +160,7 @@ describe('google-oauth.helper', () => {
             globalThis.fetch = (async (input: string | URL) => {
                 const url = String(input);
                 if (url === 'https://oauth2.googleapis.com/token') {
-                    return new Response(JSON.stringify({ id_token: idToken }), {
+                    return new Response(JSON.stringify({ id_token: idToken, access_token: 'access-xyz' }), {
                         status: 200,
                         headers: { 'Content-Type': 'application/json' }
                     });
@@ -170,6 +170,15 @@ describe('google-oauth.helper', () => {
                         status: 200,
                         headers: { 'Content-Type': 'application/json' }
                     });
+                }
+                if (url === 'https://www.googleapis.com/oauth2/v3/userinfo') {
+                    return new Response(
+                        JSON.stringify({ email: 'user@example.com', verified_email: true, hd: 'example.com' }),
+                        {
+                            status: 200,
+                            headers: { 'Content-Type': 'application/json' }
+                        }
+                    );
                 }
                 throw new Error(`unexpected fetch: ${url}`);
             }) as typeof fetch;
